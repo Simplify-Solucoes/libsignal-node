@@ -53,11 +53,11 @@ export class Curve {
         const unclampedSk = new Uint8Array(clampedSk);
 
         // Fix the first byte
-        unclampedSk[0] |= 6; // Ensure last 3 bits match expected `110` pattern
+        unclampedSk[0]! |= 6; // Ensure last 3 bits match expected `110` pattern
 
         // Fix the last byte
-        unclampedSk[31] |= 128; // Restore the highest bit
-        unclampedSk[31] &= ~64; // Clear the second-highest bit
+        unclampedSk[31]! |= 128; // Restore the highest bit
+        unclampedSk[31]! &= ~64; // Clear the second-highest bit
 
         return unclampedSk;
     }

@@ -13,14 +13,14 @@ const SESSION_RECORD_VERSION = 'v1';
 
 
 export class SessionEntry {
-    indexInfo: IndexInfoType;
-    currentRatchet: CurrentRatchetType;
-    pendingPreKey: PendingPreKeyType | null;
-    registrationId: number;
-    _chains: Record<string, Chain<Buffer>>;
+    indexInfo!: IndexInfoType;
+    currentRatchet!: CurrentRatchetType;
+    pendingPreKey: PendingPreKeyType | null = null;
+    registrationId!: number;
+    _chains: Record<string, Chain<Buffer>> = {};
 
     constructor() {
-        this._chains = {};
+        // Properties initialized via definite assignment assertions
     }
 
     toString() {
@@ -121,10 +121,10 @@ export class SessionEntry {
     }
 
     _serialize_chains(chains: Record<string, Chain<Buffer>>): Record<string, any> {
-        const r = {};
+        const r: Record<string, any> = {};
         for (const key of Object.keys(chains)) {
-            const c = chains[key];
-            const messageKeys = {};
+            const c = chains[key]!;
+            const messageKeys: Record<string, string> = {};
             for (const [idx, key] of Object.entries(c.messageKeys)) {
                 messageKeys[idx] = key.toString('base64');
             }
@@ -148,12 +148,12 @@ export class SessionEntry {
             chainType: ChainType;
             messageKeys: Record<number, string>; // counter -> base64 encoded message key
         }>): Record<string, Chain<Buffer>> {
-        const r = {};
+        const r: Record<string, Chain<Buffer>> = {};
         for (const key of Object.keys(chains_data)) {
-            const c = chains_data[key];
-            const messageKeys = {};
+            const c = chains_data[key]!;
+            const messageKeys: Record<number, Buffer> = {};
             for (const [idx, key] of Object.entries(c.messageKeys)) {
-                messageKeys[idx] = Buffer.from(key, 'base64');
+                messageKeys[parseInt(idx)] = Buffer.from(key, 'base64');
             }
             r[key] = {
                 chainKey: {
@@ -205,9 +205,9 @@ export class SessionRecord {
         let run = (data.version === undefined);
         for (let i = 0; i < migrations.length; ++i) {
             if (run) {
-                console.info("Migrating session to:", migrations[i].version);
-                migrations[i].migrate(data);
-            } else if (migrations[i].version === data.version) {
+                console.info("Migrating session to:", migrations[i]!.version);
+                migrations[i]!.migrate(data);
+            } else if (migrations[i]!.version === data.version) {
                 run = true;
             }
         }
@@ -241,7 +241,7 @@ export class SessionRecord {
     }
 
     serialize(): SerializedSessionRecordData {
-        const _sessions = {};
+        const _sessions: Record<string, any> = {};
         for (const [key, entry] of Object.entries(this.sessions)) {
             _sessions[key] = entry.serialize();
         }
@@ -256,7 +256,7 @@ export class SessionRecord {
         return (!!openSession);
     }
 
-    getSession(key: Buffer): SessionEntry {
+    getSession(key: Buffer): SessionEntry | undefined {
         const session = this.sessions[key.toString('base64')];
         if (session && session.indexInfo.baseKeyType === BaseKey.OURS) {
             throw new Error("Tried to lookup a session using our basekey");

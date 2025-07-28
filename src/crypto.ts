@@ -18,12 +18,12 @@ export class Crypto {
         const signed = [this.calculateMAC(PRK, Buffer.from(infoArray.subarray(32)))];
         
         if (chunks > 1) {
-            infoArray.set(signed[signed.length - 1]);
+            infoArray.set(signed[signed.length - 1]!);
             infoArray[infoArray.length - 1] = 2;
             signed.push(this.calculateMAC(PRK, Buffer.from(infoArray)));
         }
         if (chunks > 2) {
-            infoArray.set(signed[signed.length - 1]);
+            infoArray.set(signed[signed.length - 1]!);
             infoArray[infoArray.length - 1] = 3;
             signed.push(this.calculateMAC(PRK, Buffer.from(infoArray)));
         }
