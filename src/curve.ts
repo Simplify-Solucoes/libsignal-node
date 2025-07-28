@@ -34,7 +34,7 @@ export class Curve {
     /**
      * Normalizes public key format (removes 0x05 prefix if present)
      */
-    private scrubPubKeyFormat(pubKey: Buffer): Buffer {
+    private scrubPubKeyFormat(pubKey: Uint8Array): Uint8Array {
         if ((pubKey.byteLength !== 33 || pubKey[0] !== 5) && pubKey.byteLength !== 32) {
             throw new Error("Invalid public key");
         }
@@ -137,15 +137,15 @@ export class Curve {
     /**
      * Creates digital signature using Ed25519
      */
-    calculateSignature(privKey: Buffer, message: Buffer): Buffer {
-        this.validatePrivKey(privKey);
+    calculateSignature(privKey: Uint8Array, message: Uint8Array): Uint8Array {
+        this.validatePrivKey(Buffer.from(privKey));
         return Buffer.from(curveJs.sign(privKey, message));
     }
 
     /**
      * Verifies digital signature using Ed25519
      */
-    verifySignature(pubKey: Buffer, msg: Buffer, sig: Buffer, isInit: boolean = false): boolean {
+    verifySignature(pubKey: Uint8Array, msg: Uint8Array, sig: Uint8Array, isInit: boolean = false): boolean {
         const normalizedPubKey = this.scrubPubKeyFormat(pubKey);
         
         if (normalizedPubKey.byteLength !== 32) {

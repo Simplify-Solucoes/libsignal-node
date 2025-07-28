@@ -280,7 +280,7 @@ export class SessionBuilder {
             throw new errors.UntrustedIdentityKeyError(this.addr.id, device.identityKey);
         }
         
-        curve.verifySignature(Buffer.from(device.identityKey), device.signedPreKey.keyPair.pubKey,
+        curve.verifySignature(device.identityKey, device.signedPreKey.keyPair.pubKey,
                               device.signedPreKey.signature, true);
         
         const baseKey = curve.generateKeyPair();

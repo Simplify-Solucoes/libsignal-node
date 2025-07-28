@@ -52,7 +52,7 @@ export interface PreKeyType {
 export interface SignedPreKeyType {
   keyId: number;
   keyPair: KeyPairType;
-  signature: Buffer;
+  signature: Uint8Array;
 }
 
 export interface StorageType {
