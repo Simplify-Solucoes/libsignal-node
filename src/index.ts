@@ -10,6 +10,18 @@ export { curve } from './curve';
 export { crypto } from './crypto';
 export { errors } from './errors';
 export { FingerprintGenerator } from './numeric_fingerprint';
+export {
+    deriveSecrets,
+    decrypt,
+    encrypt,
+    calculateMAC
+ } from './crypto';
+
+export {
+    generateKeyPair,
+    calculateSignature,
+    verifySignature
+} from './curve';
 
 // Export types
 export type {

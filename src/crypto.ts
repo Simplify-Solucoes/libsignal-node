@@ -65,3 +65,16 @@ export class Crypto {
 
 // Default instance for convenience
 export const crypto = new Crypto();
+
+// Standalone function exports
+export const deriveSecrets = (input: Buffer, salt: Buffer, info: Buffer, chunks: number = 3) => 
+    crypto.deriveSecrets(input, salt, info, chunks);
+
+export const decrypt = (key: Buffer, data: Buffer, iv: Buffer) => 
+    crypto.decrypt(key, data, iv);
+
+export const encrypt = (key: Buffer, data: Buffer, iv: Buffer) => 
+    crypto.encrypt(key, data, iv);
+
+export const calculateMAC = (key: Buffer, data: Buffer) => 
+    crypto.calculateMAC(key, data);

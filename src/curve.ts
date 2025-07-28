@@ -161,3 +161,13 @@ export class Curve {
 
 // Default instance for convenience
 export const curve = new Curve();
+
+// Standalone function exports
+export const generateKeyPair = () => 
+    curve.generateKeyPair();
+
+export const calculateSignature = (privKey: Buffer, message: Buffer) => 
+    curve.calculateSignature(privKey, message);
+
+export const verifySignature = (pubKey: Buffer, msg: Buffer, sig: Buffer, isInit: boolean = false) => 
+    curve.verifySignature(pubKey, msg, sig, isInit);
