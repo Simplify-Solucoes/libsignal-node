@@ -166,8 +166,8 @@ export const curve = new Curve();
 export const generateKeyPair = () => 
     curve.generateKeyPair();
 
-export const calculateSignature = (privKey: Buffer, message: Buffer) => 
+export const calculateSignature = (privKey: Uint8Array, message: Uint8Array) => 
     curve.calculateSignature(privKey, message);
 
-export const verifySignature = (pubKey: Buffer, msg: Buffer, sig: Buffer, isInit: boolean = false) => 
+export const verifySignature = (pubKey: Uint8Array, msg: Uint8Array, sig: Uint8Array, isInit: boolean = false) => 
     curve.verifySignature(pubKey, msg, sig, isInit);
