@@ -1,18 +1,23 @@
-// vim: ts=4:sw=4
+// TypeScript migration of session_record.js
+// TODO: Add proper type annotations
+// TODO: Replace require() with import statements
+// TODO: Add TypeScript interfaces and types
+// TODO: Update exports to use ES6 syntax
 
-const BaseKeyType = require('./base_key_type');
+// vim: ts=4:sw=4
+import { BaseKey } from './types';
+import type { IndexInfoType, CurrentRatchetType, PreKeyType, ChainType, SerializedSessionData, PendingPreKeyType, Chain, SerializedSessionRecordData } from './types';
 
 const CLOSED_SESSIONS_MAX = 40;
 const SESSION_RECORD_VERSION = 'v1';
 
-function assertBuffer(value) {
-    if (!Buffer.isBuffer(value)) {
-        throw new TypeError("Buffer required");
-    }
-}
 
-
-class SessionEntry {
+export class SessionEntry {
+    indexInfo: IndexInfoType;
+    currentRatchet: CurrentRatchetType;
+    pendingPreKey: PendingPreKeyType | null;
+    registrationId: number;
+    _chains: Record<string, Chain<Buffer>>;
 
     constructor() {
         this._chains = {};
@@ -28,8 +33,7 @@ class SessionEntry {
         return this.toString();
     }
 
-    addChain(key, value) {
-        assertBuffer(key);
+    addChain(key: Buffer, value: Chain<Buffer>) {
         const id = key.toString('base64');
         if (this._chains.hasOwnProperty(id)) {
             throw new Error("Overwrite attempt");
@@ -37,13 +41,11 @@ class SessionEntry {
         this._chains[id] = value;
     }
 
-    getChain(key) {
-        assertBuffer(key);
+    getChain(key: Buffer): Chain<Buffer> | undefined {
         return this._chains[key.toString('base64')];
     }
 
-    deleteChain(key) {
-        assertBuffer(key);
+    deleteChain(key: Buffer) {
         const id = key.toString('base64');
         if (!this._chains.hasOwnProperty(id)) {
             throw new ReferenceError("Not Found");
@@ -57,7 +59,7 @@ class SessionEntry {
         }
     }
 
-    serialize() {
+    serialize(): SerializedSessionData {
         const data = {
             registrationId: this.registrationId,
             currentRatchet: {
@@ -77,16 +79,17 @@ class SessionEntry {
                 created: this.indexInfo.created,
                 remoteIdentityKey: this.indexInfo.remoteIdentityKey.toString('base64')
             },
+            pendingPreKey: this.pendingPreKey ? {
+                baseKey: this.pendingPreKey.baseKey.toString('base64'),
+                ...(this.pendingPreKey.preKeyId !== undefined && { preKeyId: this.pendingPreKey.preKeyId }),
+                signedKeyId: this.pendingPreKey.signedKeyId
+            } : undefined,
             _chains: this._serialize_chains(this._chains)
         };
-        if (this.pendingPreKey) {
-            data.pendingPreKey = Object.assign({}, this.pendingPreKey);
-            data.pendingPreKey.baseKey = this.pendingPreKey.baseKey.toString('base64');
-        }
         return data;
     }
 
-    static deserialize(data) {
+    static deserialize(data: SerializedSessionData): SessionEntry {
         const obj = new this();
         obj.registrationId = data.registrationId;
         obj.currentRatchet = {
@@ -97,7 +100,7 @@ class SessionEntry {
             lastRemoteEphemeralKey: Buffer.from(data.currentRatchet.lastRemoteEphemeralKey, 'base64'),
             previousCounter: data.currentRatchet.previousCounter,
             rootKey: Buffer.from(data.currentRatchet.rootKey, 'base64')
-        };
+        } as CurrentRatchetType;
         obj.indexInfo = {
             baseKey: Buffer.from(data.indexInfo.baseKey, 'base64'),
             baseKeyType: data.indexInfo.baseKeyType,
@@ -108,13 +111,16 @@ class SessionEntry {
         };
         obj._chains = this._deserialize_chains(data._chains);
         if (data.pendingPreKey) {
-            obj.pendingPreKey = Object.assign({}, data.pendingPreKey);
-            obj.pendingPreKey.baseKey = Buffer.from(data.pendingPreKey.baseKey, 'base64');
+            obj.pendingPreKey = {
+                baseKey: Buffer.from(data.pendingPreKey.baseKey, 'base64'),
+                ...(data.pendingPreKey.preKeyId !== undefined && { preKeyId: data.pendingPreKey.preKeyId }),
+                signedKeyId: data.pendingPreKey.signedKeyId
+            };
         }
         return obj;
     }
 
-    _serialize_chains(chains) {
+    _serialize_chains(chains: Record<string, Chain<Buffer>>): Record<string, any> {
         const r = {};
         for (const key of Object.keys(chains)) {
             const c = chains[key];
@@ -125,7 +131,7 @@ class SessionEntry {
             r[key] = {
                 chainKey: {
                     counter: c.chainKey.counter,
-                    key: c.chainKey.key && c.chainKey.key.toString('base64')
+                    ...(c.chainKey.key && { key: c.chainKey.key.toString('base64') })
                 },
                 chainType: c.chainType,
                 messageKeys: messageKeys
@@ -134,7 +140,14 @@ class SessionEntry {
         return r;
     }
 
-    static _deserialize_chains(chains_data) {
+    static _deserialize_chains(chains_data: Record<string, {
+            chainKey: {
+                counter: number;
+                key?: string; // base64 encoded, optional like in libsignal-protocol-master
+            };
+            chainType: ChainType;
+            messageKeys: Record<number, string>; // counter -> base64 encoded message key
+        }>): Record<string, Chain<Buffer>> {
         const r = {};
         for (const key of Object.keys(chains_data)) {
             const c = chains_data[key];
@@ -145,7 +158,7 @@ class SessionEntry {
             r[key] = {
                 chainKey: {
                     counter: c.chainKey.counter,
-                    key: c.chainKey.key && Buffer.from(c.chainKey.key, 'base64')
+                    ...(c.chainKey.key && { key: Buffer.from(c.chainKey.key, 'base64') })
                 },
                 chainType: c.chainType,
                 messageKeys: messageKeys
@@ -159,7 +172,7 @@ class SessionEntry {
 
 const migrations = [{
     version: 'v1',
-    migrate: function migrateV1(data) {
+    migrate: function migrateV1(data: any) {
         const sessions = data._sessions;
         if (data.registrationId) {
             for (const key in sessions) {
@@ -180,13 +193,15 @@ const migrations = [{
 }];
 
 
-class SessionRecord {
+export class SessionRecord {
+    sessions: Record<string, SessionEntry>;
+    version: string;
 
     static createEntry() {
         return new SessionEntry();
     }
 
-    static migrate(data) {
+    static migrate(data: any) {
         let run = (data.version === undefined);
         for (let i = 0; i < migrations.length; ++i) {
             if (run) {
@@ -201,16 +216,22 @@ class SessionRecord {
         }
     }
 
-    static deserialize(data) {
+    static deserialize(data: any): SessionRecord {
+        // Keep original Baileys migration logic
         if (data.version !== SESSION_RECORD_VERSION) {
             this.migrate(data);
         }
+        
         const obj = new this();
+        
+        // Keep original Baileys logic: only process if _sessions exists
         if (data._sessions) {
             for (const [key, entry] of Object.entries(data._sessions)) {
-                obj.sessions[key] = SessionEntry.deserialize(entry);
+                // Type assertion for the entry since it comes from storage
+                obj.sessions[key] = SessionEntry.deserialize(entry as SerializedSessionData);
             }
         }
+        
         return obj;
     }
 
@@ -219,7 +240,7 @@ class SessionRecord {
         this.version = SESSION_RECORD_VERSION;
     }
 
-    serialize() {
+    serialize(): SerializedSessionRecordData {
         const _sessions = {};
         for (const [key, entry] of Object.entries(this.sessions)) {
             _sessions[key] = entry.serialize();
@@ -230,33 +251,33 @@ class SessionRecord {
         };
     }
 
-    haveOpenSession() {
+    haveOpenSession(): boolean {
         const openSession = this.getOpenSession();
-        return (!!openSession && typeof openSession.registrationId === 'number');
+        return (!!openSession);
     }
 
-    getSession(key) {
-        assertBuffer(key);
+    getSession(key: Buffer): SessionEntry {
         const session = this.sessions[key.toString('base64')];
-        if (session && session.indexInfo.baseKeyType === BaseKeyType.OURS) {
+        if (session && session.indexInfo.baseKeyType === BaseKey.OURS) {
             throw new Error("Tried to lookup a session using our basekey");
         }
         return session;
     }
 
-    getOpenSession() {
+    getOpenSession(): SessionEntry | undefined {
         for (const session of Object.values(this.sessions)) {
             if (!this.isClosed(session)) {
                 return session;
             }
         }
+        return undefined;
     }
 
-    setSession(session) {
+    setSession(session: SessionEntry) {
         this.sessions[session.indexInfo.baseKey.toString('base64')] = session;
     }
 
-    getSessions() {
+    getSessions(): SessionEntry[] {
         // Return sessions ordered with most recently used first.
         return Array.from(Object.values(this.sessions)).sort((a, b) => {
             const aUsed = a.indexInfo.used || 0;
@@ -265,7 +286,7 @@ class SessionRecord {
         });
     }
 
-    closeSession(session) {
+    closeSession(session: SessionEntry): void {
         if (this.isClosed(session)) {
             console.warn("Session already closed", session);
             return;
@@ -274,7 +295,7 @@ class SessionRecord {
         session.indexInfo.closed = Date.now();
     }
 
-    openSession(session) {
+    openSession(session: SessionEntry) {
         if (!this.isClosed(session)) {
             console.warn("Session already open");
         }
@@ -282,14 +303,14 @@ class SessionRecord {
         session.indexInfo.closed = -1;
     }
 
-    isClosed(session) {
+    isClosed(session: SessionEntry): boolean {
         return session.indexInfo.closed !== -1;
     }
 
-    removeOldSessions() {
+    removeOldSessions(): void {
         while (Object.keys(this.sessions).length > CLOSED_SESSIONS_MAX) {
-            let oldestKey;
-            let oldestSession;
+            let oldestKey: string | undefined;
+            let oldestSession: SessionEntry | undefined;
             for (const [key, session] of Object.entries(this.sessions)) {
                 if (session.indexInfo.closed !== -1 &&
                     (!oldestSession || session.indexInfo.closed < oldestSession.indexInfo.closed)) {
@@ -306,11 +327,9 @@ class SessionRecord {
         }
     }
 
-    deleteAllSessions() {
+    deleteAllSessions(): void {
         for (const key of Object.keys(this.sessions)) {
             delete this.sessions[key];
         }
     }
 }
-
-module.exports = SessionRecord;
