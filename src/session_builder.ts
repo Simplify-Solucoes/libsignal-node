@@ -276,14 +276,23 @@ export class SessionBuilder {
     private async initOutgoingJob(device: E2ESession): Promise<void> {
         const fqAddr = this.addr.toString();
         
+        // Validate required parameters
+        if (!device.identityKey) {
+            throw new Error("Missing required parameter: device.identityKey");
+        }
+        if (!device.registrationId) {
+            throw new Error("Missing required parameter: device.registrationId");
+        }
+        if (!device.signedPreKey?.keyPair?.pubKey) {
+            throw new Error("Missing required parameter: device.signedPreKey.keyPair.pubKey");
+        }
+        
         if (!await this.storage.isTrustedIdentity(this.addr.id, Buffer.from(device.identityKey))) {
             throw new errors.UntrustedIdentityKeyError(this.addr.id, device.identityKey);
         }
         
-        if (device.signedPreKey?.keyPair?.pubKey) {
-            curve.verifySignature(device.identityKey, device.signedPreKey.keyPair.pubKey,
-                                  device.signedPreKey.signature, true);
-        }
+        curve.verifySignature(device.identityKey, device.signedPreKey.keyPair.pubKey,
+                              device.signedPreKey.signature, true);
         
         const baseKey = curve.generateKeyPair();
         const devicePreKey = device.preKey && device.preKey?.keyPair?.pubKey;
@@ -402,11 +411,22 @@ export class SessionBuilder {
             }
             ourSignedKey = ourEphemeralKey;
         } else {
-            if (theirSignedPubKey) {
-                throw new Error("Invalid call to initSession");
+            if (!theirSignedPubKey) {
+                theirSignedPubKey = theirEphemeralPubKey;
             }
-            theirSignedPubKey = theirEphemeralPubKey;
         }
+        
+        // Validate required parameters before Buffer.from() calls
+        if (!theirIdentityPubKey) {
+            throw new Error("theirIdentityPubKey is required for ECDHE");
+        }
+        if (!theirEphemeralPubKey) {
+            throw new Error("theirEphemeralPubKey is required for ECDHE");
+        }
+        if (!theirSignedPubKey) {
+            throw new Error("theirSignedPubKey is required for ECDHE");
+        }
+        
         let sharedSecret: Uint8Array;
         if (!ourEphemeralKey || !theirEphemeralPubKey) {
             sharedSecret = new Uint8Array(32 * 4);
