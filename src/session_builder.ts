@@ -280,21 +280,23 @@ export class SessionBuilder {
             throw new errors.UntrustedIdentityKeyError(this.addr.id, device.identityKey);
         }
         
-        curve.verifySignature(device.identityKey, device.signedPreKey.keyPair.pubKey,
-                              device.signedPreKey.signature, true);
+        if (device.signedPreKey?.keyPair?.pubKey) {
+            curve.verifySignature(device.identityKey, device.signedPreKey.keyPair.pubKey,
+                                  device.signedPreKey.signature, true);
+        }
         
         const baseKey = curve.generateKeyPair();
-        const devicePreKey = device.preKey && device.preKey.keyPair.pubKey;
+        const devicePreKey = device.preKey && device.preKey?.keyPair?.pubKey;
         const session = await this.initSession(true, baseKey, undefined, device.identityKey,
-                                               devicePreKey, device.signedPreKey.keyPair.pubKey,
+                                               devicePreKey, device.signedPreKey?.keyPair?.pubKey,
                                                device.registrationId);
         
         session.pendingPreKey = {
-            signedKeyId: device.signedPreKey.keyId,
+            signedKeyId: device.signedPreKey?.keyId,
             baseKey: baseKey.pubKey
         };
         
-        if (device.preKey) {
+        if (device.preKey?.keyId !== undefined) {
             session.pendingPreKey.preKeyId = device.preKey.keyId;
         }
         
