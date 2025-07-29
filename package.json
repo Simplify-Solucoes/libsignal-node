@@ -25,7 +25,8 @@
     "format:check": "prettier --check 'src/**/*.{js,ts,json}'",
     "prepublishOnly": "npm run build && npm run test && npm run lint",
     "clean": "rimraf lib",
-    "dev": "npm run build:watch"
+    "dev": "npm run build:watch",
+    "prepare": "npm run build"
   },
   "dependencies": {
     "@types/google-protobuf": "^3.15.12",
