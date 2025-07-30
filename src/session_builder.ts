@@ -283,40 +283,21 @@ export class SessionBuilder {
         if (!device.registrationId) {
             throw new Error("Missing required parameter: device.registrationId");
         }
-        // Note: signedPreKey is optional in some group contexts or sender key establishment
         if (!device.signedPreKey?.keyPair?.pubKey) {
-            console.warn("Missing signedPreKey.keyPair.pubKey - this may indicate group message context or incomplete prekey bundle");
-            // For group messages, we can proceed without signedPreKey validation
-            // The group session will handle the cryptographic requirements separately
+            throw new Error("Missing required parameter: device.signedPreKey.keyPair.pubKey");
         }
         
         if (!await this.storage.isTrustedIdentity(this.addr.id, Buffer.from(device.identityKey))) {
             throw new errors.UntrustedIdentityKeyError(this.addr.id, device.identityKey);
         }
         
-        // Only verify signature if signedPreKey is available (not required for group messages)
-        if (device.signedPreKey?.keyPair?.pubKey && device.signedPreKey?.signature) {
-            curve.verifySignature(device.identityKey, device.signedPreKey.keyPair.pubKey,
-                                  device.signedPreKey.signature, true);
-        }
+        curve.verifySignature(device.identityKey, device.signedPreKey.keyPair.pubKey,
+                              device.signedPreKey.signature, true);
         
         const baseKey = curve.generateKeyPair();
         const devicePreKey = device.preKey && device.preKey?.keyPair?.pubKey;
-        
-        // For group messages, if devicePreKey is not available, use signedPreKey as ephemeral key
-        // If neither is available, generate a temporary key for the session
-        let theirEphemeralKey = devicePreKey;
-        if (!theirEphemeralKey) {
-            theirEphemeralKey = device.signedPreKey?.keyPair?.pubKey;
-            if (!theirEphemeralKey) {
-                // Last resort: use identity key as ephemeral (not ideal but allows group messages to work)
-                console.warn("Using identity key as ephemeral key for group message - this is a fallback");
-                theirEphemeralKey = device.identityKey;
-            }
-        }
-        
         const session = await this.initSession(true, baseKey, undefined, device.identityKey,
-                                               theirEphemeralKey, device.signedPreKey?.keyPair?.pubKey,
+                                               devicePreKey, device.signedPreKey?.keyPair?.pubKey,
                                                device.registrationId);
         
         session.pendingPreKey = {
@@ -429,10 +410,6 @@ export class SessionBuilder {
                 throw new Error("Invalid call to initSession");
             }
             ourSignedKey = ourEphemeralKey;
-            // For initiator (outgoing), if theirSignedPubKey is missing (group context), use theirEphemeralPubKey
-            if (!theirSignedPubKey) {
-                theirSignedPubKey = theirEphemeralPubKey;
-            }
         } else {
             if (!theirSignedPubKey) {
                 theirSignedPubKey = theirEphemeralPubKey;
