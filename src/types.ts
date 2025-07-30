@@ -7,7 +7,7 @@ export type PreKeyWhisperMessageType = textsecure.PreKeyWhisperMessage;
 
 export type E2ESession = {
 	registrationId: number
-	identityKey: Buffer
+	identityKey: Uint8Array
 	signedPreKey: SignedPreKeyType
 	preKey: PreKeyType
 }
