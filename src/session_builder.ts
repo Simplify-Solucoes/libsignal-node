@@ -393,7 +393,7 @@ export class SessionBuilder {
     }
 
     async initSession(isInitiator: boolean, ourEphemeralKey: KeyPairType, ourSignedKey: KeyPairType, theirIdentityPubKey: Uint8Array,
-                      theirEphemeralPubKey: Uint8Array, theirSignedPubKey: Uint8Array | undefined, registrationId: number): Promise<SessionEntry> {
+                      theirEphemeralPubKey: Uint8Array | undefined, theirSignedPubKey: Uint8Array | undefined, registrationId: number): Promise<SessionEntry> {
         if (isInitiator) {
             if (ourSignedKey) {
                 throw new Error("Invalid call to initSession");
