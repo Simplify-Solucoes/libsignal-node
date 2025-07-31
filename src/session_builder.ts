@@ -372,7 +372,7 @@ export class SessionBuilder {
         }
         
         const preKeyPair = await this.storage.loadPreKey(message.preKeyId);
-        if (message.preKeyId && !preKeyPair) {
+        if (message.preKeyId && message.preKeyId !== 0 && !preKeyPair) {
             throw new errors.PreKeyError('Invalid PreKey ID');
         }   
         
