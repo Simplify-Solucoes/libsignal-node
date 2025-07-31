@@ -225,28 +225,38 @@ export class SessionCipher {
     }
 
     /**
-     * Detect if this is likely a sync-related message that should bypass concurrency control
-     * Very conservative approach to avoid false positives that would break normal messaging
+     * Detect if this is a time-sensitive sync message that needs immediate processing
+     * WhatsApp sync keys have very tight timing windows and cannot tolerate delays
      */
-    private isLikelySyncMessage(): boolean {
+    private isTimeSensitiveSyncMessage(): boolean {
         const key = this.addr.toString();
         
-        // Only bypass for WhatsApp system addresses, not regular user contacts
-        // Be very specific about sync service patterns
-        if (key.includes('@lid.whatsapp.net') ||           // WhatsApp system messages  
-            key.includes('@broadcast') ||                   // Broadcast messages
-            key.includes('@newsletter') ||                  // Newsletter messages
-            key === 'status@broadcast' ||                   // Status updates
-            key.includes('@g.us.history') ||               // Group history sync
-            key.includes('.whatsapp.net.history')) {       // Chat history sync
+        // TIME-SENSITIVE: These messages expire quickly and must be processed immediately
+        if (key.includes('@lid.whatsapp.net') ||           // WhatsApp sync service 
+            key.includes('app-state-sync-key') ||           // App state sync keys
+            key.includes('@s.whatsapp.net')) {              // WhatsApp system service
             return true;
         }
         
-        // Also bypass during initial connection flood (first 50 messages from WhatsApp servers)
-        // This catches the entire initial handshake flood without affecting normal messaging
+        // Also immediate processing for initial handshake (first 20 messages)
         const stats = SessionCipher.mutexStats.get(key);
-        if (stats && stats.acquisitions <= 50 && key.includes('@s.whatsapp.net')) {
-            // First 50 messages from WhatsApp servers during initial QR pairing flood
+        if (stats && stats.acquisitions <= 20) {
+            return true; // Initial handshake needs immediate processing
+        }
+        
+        return false;
+    }
+
+    /**
+     * Detect if this is a non-critical message that can bypass for performance
+     */
+    private isNonCriticalMessage(): boolean {
+        const key = this.addr.toString();
+        
+        // Only bypass truly non-critical messages
+        if (key.includes('@broadcast') ||                   // Broadcast messages
+            key === 'status@broadcast' ||                   // Status updates
+            key.includes('@newsletter')) {                  // Newsletter messages
             return true;
         }
         
@@ -416,14 +426,29 @@ export class SessionCipher {
 
     async decryptWhisperMessage(data: Uint8Array): Promise<Buffer> {
         const key = this.addr.toString();
+        
+        // LOG: Detailed message structure analysis
+        console.log('\n=== DECRYPT WHISPER MESSAGE ===');
+        console.log('Address:', key);
+        console.log('Data length:', data.length);
+        console.log('Data type:', data.constructor.name);
+        console.log('First 10 bytes:', Array.from(data.slice(0, 10)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+        console.log('Is sync message:', this.isTimeSensitiveSyncMessage());
+        console.log('Is non-critical:', this.isNonCriticalMessage());
+        
         const controller = new AbortController();
         this.abortControllers.set(key, controller);
         
         try {
-            // CRITICAL FIX: Bypass concurrency control for app-state-sync-key messages
-            // These are critical handshake messages that need immediate processing
-            if (this.isLikelySyncMessage()) {
-                console.log('=== BYPASSING CONCURRENCY FOR SYNC MESSAGE (WhisperMessage) ===', key);
+            // CRITICAL FIX: Immediate processing for time-sensitive sync messages
+            // WhatsApp sync keys expire quickly and cannot tolerate mutex delays
+            if (this.isTimeSensitiveSyncMessage()) {
+                console.log('=== IMMEDIATE PROCESSING FOR TIME-SENSITIVE SYNC ===', key);
+                return await this.processdecryptWhisperMessage(data);
+            }
+            
+            // Fast bypass for non-critical messages
+            if (this.isNonCriticalMessage()) {
                 return await this.processdecryptWhisperMessage(data);
             }
             
@@ -437,8 +462,8 @@ export class SessionCipher {
                     const startTime = Date.now();
                     const mutex = this.getMutex();
                     
-                    // CRITICAL FIX: Use longer timeout for message decryption (2 minutes)
-                    const MESSAGE_TIMEOUT = 120000; // 2 minutes instead of 30 seconds
+                    // Optimized timeout for regular message decryption (30 seconds)
+                    const MESSAGE_TIMEOUT = 30000; // 30 seconds - sync messages bypass this anyway
                     const result = await withTimeout(mutex, MESSAGE_TIMEOUT).runExclusive(async () => {
                         // Track acquisition metrics
                         const waitTime = Date.now() - startTime;
@@ -465,6 +490,12 @@ export class SessionCipher {
             if (!record) {
                 throw new errors.SessionError("No session record");
             }
+            
+            // LOG: WhisperMessage processing details
+            console.log('\n=== WHISPER MESSAGE PROCESSING ===');
+            console.log('Session record exists:', !!record);
+            console.log('Available sessions:', record?.getSessions()?.length || 0);
+            console.log('Has open session:', record?.haveOpenSession() || false);
             const result = await this.decryptWithSessions(data, record.getSessions());
             const remoteIdentityKey = result.session.indexInfo.remoteIdentityKey;
             if (!await this.storage.isTrustedIdentity(this.addr.id, remoteIdentityKey)) {
@@ -484,14 +515,31 @@ export class SessionCipher {
 
     async decryptPreKeyWhisperMessage(data: Uint8Array): Promise<Buffer> {
         const key = this.addr.toString();
+        const versions = this._decodeTupleByte(data[0]);
+        
+        // LOG: Detailed PreKey message structure analysis
+        console.log('\n=== DECRYPT PREKEY WHISPER MESSAGE ===');
+        console.log('Address:', key);
+        console.log('Data length:', data.length);
+        console.log('Data type:', data.constructor.name);
+        console.log('Versions:', versions, '(min/max)');
+        console.log('First 20 bytes:', Array.from(data.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+        console.log('Is sync message:', this.isTimeSensitiveSyncMessage());
+        console.log('Is non-critical:', this.isNonCriticalMessage());
+        
         const controller = new AbortController();
         this.abortControllers.set(key, controller);
         
         try {
-            // CRITICAL FIX: Bypass concurrency control for app-state-sync-key messages
-            // These are critical handshake messages that need immediate processing
-            if (this.isLikelySyncMessage()) {
-                console.log('=== BYPASSING CONCURRENCY FOR SYNC MESSAGE ===', key);
+            // CRITICAL FIX: Immediate processing for time-sensitive sync messages
+            // WhatsApp sync keys expire quickly and cannot tolerate mutex delays
+            if (this.isTimeSensitiveSyncMessage()) {
+                console.log('=== IMMEDIATE PROCESSING FOR TIME-SENSITIVE SYNC (PreKey) ===', key);
+                return await this.processdecryptPreKeyWhisperMessage(data);
+            }
+            
+            // Fast bypass for non-critical messages
+            if (this.isNonCriticalMessage()) {
                 return await this.processdecryptPreKeyWhisperMessage(data);
             }
             
@@ -505,8 +553,8 @@ export class SessionCipher {
                     const startTime = Date.now();
                     const mutex = this.getMutex();
                     
-                    // CRITICAL FIX: Use much longer timeout for protocol messages (5 minutes)
-                    const PROTOCOL_MESSAGE_TIMEOUT = 300000; // 5 minutes instead of 30 seconds
+                    // Optimized timeout for PreKey protocol messages (1 minute)  
+                    const PROTOCOL_MESSAGE_TIMEOUT = 60000; // 1 minute - sync messages bypass this anyway
                     const result = await withTimeout(mutex, PROTOCOL_MESSAGE_TIMEOUT).runExclusive(async () => {
                         // Track acquisition metrics
                         const waitTime = Date.now() - startTime;
@@ -535,6 +583,17 @@ export class SessionCipher {
         }
             let record = await this.getRecord();
             const preKeyProto = PreKeyWhisperMessage.deserialize(data.slice(1));
+            
+            // LOG: PreKey protocol structure details
+            console.log('\n=== PREKEY PROTO ANALYSIS ===');
+            console.log('Registration ID:', preKeyProto.registrationId);
+            console.log('PreKey ID:', preKeyProto.preKeyId);
+            console.log('Signed PreKey ID:', preKeyProto.signedPreKeyId);
+            console.log('Base Key length:', preKeyProto.baseKey?.length);
+            console.log('Identity Key length:', preKeyProto.identityKey?.length);
+            console.log('Message length:', preKeyProto.message?.length);
+            console.log('Base Key (hex):', preKeyProto.baseKey ? Array.from(preKeyProto.baseKey.slice(0, 10)).map(b => b.toString(16).padStart(2, '0')).join(' ') + '...' : 'null');
+            
             if (!record) {
                 if (preKeyProto.registrationId == null) {
                     throw new Error("No registrationId");
@@ -544,7 +603,8 @@ export class SessionCipher {
             const builder = new SessionBuilder(this.storage, this.addr);
             const preKeyId = await builder.initIncoming(record, preKeyProto);
             const bufferedMessage = Buffer.from(preKeyProto.message);
-            const session = record.getSession(bufferedMessage);
+            // CRITICAL FIX: Use baseKey for session selection (original Baileys logic)
+            const session = record.getSession(Buffer.from(preKeyProto.baseKey));
             const plaintext = await this.doDecryptWhisperMessage(bufferedMessage, session);
             await this.storeRecord(record);
             if (preKeyId) {
