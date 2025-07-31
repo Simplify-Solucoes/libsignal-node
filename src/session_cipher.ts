@@ -224,6 +224,35 @@ export class SessionCipher {
         SessionCipher.mutexStats.clear();
     }
 
+    /**
+     * Detect if this is likely a sync-related message that should bypass concurrency control
+     * Very conservative approach to avoid false positives that would break normal messaging
+     */
+    private isLikelySyncMessage(): boolean {
+        const key = this.addr.toString();
+        
+        // Only bypass for WhatsApp system addresses, not regular user contacts
+        // Be very specific about sync service patterns
+        if (key.includes('@lid.whatsapp.net') ||           // WhatsApp system messages  
+            key.includes('@broadcast') ||                   // Broadcast messages
+            key.includes('@newsletter') ||                  // Newsletter messages
+            key === 'status@broadcast' ||                   // Status updates
+            key.includes('@g.us.history') ||               // Group history sync
+            key.includes('.whatsapp.net.history')) {       // Chat history sync
+            return true;
+        }
+        
+        // Also bypass during initial connection flood (first 50 messages from WhatsApp servers)
+        // This catches the entire initial handshake flood without affecting normal messaging
+        const stats = SessionCipher.mutexStats.get(key);
+        if (stats && stats.acquisitions <= 50 && key.includes('@s.whatsapp.net')) {
+            // First 50 messages from WhatsApp servers during initial QR pairing flood
+            return true;
+        }
+        
+        return false;
+    }
+
     _encodeTupleByte(number1: number, number2: number): number {
         if (number1 > 15 || number2 > 15) {
             throw TypeError("Numbers must be 4 bits or less");
@@ -391,8 +420,15 @@ export class SessionCipher {
         this.abortControllers.set(key, controller);
         
         try {
+            // CRITICAL FIX: Bypass concurrency control for app-state-sync-key messages
+            // These are critical handshake messages that need immediate processing
+            if (this.isLikelySyncMessage()) {
+                console.log('=== BYPASSING CONCURRENCY FOR SYNC MESSAGE (WhisperMessage) ===', key);
+                return await this.processdecryptWhisperMessage(data);
+            }
+            
             return await this.runWithPriority(
-                OperationPriority.NORMAL,
+                OperationPriority.HIGH, // CRITICAL FIX: Use HIGH priority for all message decryption
                 async () => {
                     if (controller.signal.aborted) {
                         throw new Error('Operation cancelled');
@@ -401,8 +437,9 @@ export class SessionCipher {
                     const startTime = Date.now();
                     const mutex = this.getMutex();
                     
-                    // Use withTimeout for mutex execution
-                    const result = await withTimeout(mutex, MUTEX_TIMEOUT).runExclusive(async () => {
+                    // CRITICAL FIX: Use longer timeout for message decryption (2 minutes)
+                    const MESSAGE_TIMEOUT = 120000; // 2 minutes instead of 30 seconds
+                    const result = await withTimeout(mutex, MESSAGE_TIMEOUT).runExclusive(async () => {
                         // Track acquisition metrics
                         const waitTime = Date.now() - startTime;
                         const stats = SessionCipher.mutexStats.get(key);
@@ -451,8 +488,15 @@ export class SessionCipher {
         this.abortControllers.set(key, controller);
         
         try {
+            // CRITICAL FIX: Bypass concurrency control for app-state-sync-key messages
+            // These are critical handshake messages that need immediate processing
+            if (this.isLikelySyncMessage()) {
+                console.log('=== BYPASSING CONCURRENCY FOR SYNC MESSAGE ===', key);
+                return await this.processdecryptPreKeyWhisperMessage(data);
+            }
+            
             return await this.runWithPriority(
-                OperationPriority.NORMAL,
+                OperationPriority.HIGH, // CRITICAL FIX: Use HIGH priority for protocol messages
                 async () => {
                     if (controller.signal.aborted) {
                         throw new Error('Operation cancelled');
@@ -461,8 +505,9 @@ export class SessionCipher {
                     const startTime = Date.now();
                     const mutex = this.getMutex();
                     
-                    // Use withTimeout for mutex execution
-                    const result = await withTimeout(mutex, MUTEX_TIMEOUT).runExclusive(async () => {
+                    // CRITICAL FIX: Use much longer timeout for protocol messages (5 minutes)
+                    const PROTOCOL_MESSAGE_TIMEOUT = 300000; // 5 minutes instead of 30 seconds
+                    const result = await withTimeout(mutex, PROTOCOL_MESSAGE_TIMEOUT).runExclusive(async () => {
                         // Track acquisition metrics
                         const waitTime = Date.now() - startTime;
                         const stats = SessionCipher.mutexStats.get(key);
