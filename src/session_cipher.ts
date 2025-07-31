@@ -224,44 +224,6 @@ export class SessionCipher {
         SessionCipher.mutexStats.clear();
     }
 
-    /**
-     * Detect if this is a time-sensitive sync message that needs immediate processing
-     * WhatsApp sync keys have very tight timing windows and cannot tolerate delays
-     */
-    private isTimeSensitiveSyncMessage(): boolean {
-        const key = this.addr.toString();
-        
-        // TIME-SENSITIVE: These messages expire quickly and must be processed immediately
-        if (key.includes('@lid.whatsapp.net') ||           // WhatsApp sync service 
-            key.includes('app-state-sync-key') ||           // App state sync keys
-            key.includes('@s.whatsapp.net')) {              // WhatsApp system service
-            return true;
-        }
-        
-        // Also immediate processing for initial handshake (first 20 messages)
-        const stats = SessionCipher.mutexStats.get(key);
-        if (stats && stats.acquisitions <= 20) {
-            return true; // Initial handshake needs immediate processing
-        }
-        
-        return false;
-    }
-
-    /**
-     * Detect if this is a non-critical message that can bypass for performance
-     */
-    private isNonCriticalMessage(): boolean {
-        const key = this.addr.toString();
-        
-        // Only bypass truly non-critical messages
-        if (key.includes('@broadcast') ||                   // Broadcast messages
-            key === 'status@broadcast' ||                   // Status updates
-            key.includes('@newsletter')) {                  // Newsletter messages
-            return true;
-        }
-        
-        return false;
-    }
 
     _encodeTupleByte(number1: number, number2: number): number {
         if (number1 > 15 || number2 > 15) {
@@ -433,24 +395,12 @@ export class SessionCipher {
         console.log('Data length:', data.length);
         console.log('Data type:', data.constructor.name);
         console.log('First 10 bytes:', Array.from(data.slice(0, 10)).map(b => b.toString(16).padStart(2, '0')).join(' '));
-        console.log('Is sync message:', this.isTimeSensitiveSyncMessage());
-        console.log('Is non-critical:', this.isNonCriticalMessage());
+        console.log('Processing via mutex system (PreKey 0 issue resolved)');
         
         const controller = new AbortController();
         this.abortControllers.set(key, controller);
         
         try {
-            // CRITICAL FIX: Immediate processing for time-sensitive sync messages
-            // WhatsApp sync keys expire quickly and cannot tolerate mutex delays
-            if (this.isTimeSensitiveSyncMessage()) {
-                console.log('=== IMMEDIATE PROCESSING FOR TIME-SENSITIVE SYNC ===', key);
-                return await this.processdecryptWhisperMessage(data);
-            }
-            
-            // Fast bypass for non-critical messages
-            if (this.isNonCriticalMessage()) {
-                return await this.processdecryptWhisperMessage(data);
-            }
             
             return await this.runWithPriority(
                 OperationPriority.HIGH, // CRITICAL FIX: Use HIGH priority for all message decryption
@@ -524,24 +474,12 @@ export class SessionCipher {
         console.log('Data type:', data.constructor.name);
         console.log('Versions:', versions, '(min/max)');
         console.log('First 20 bytes:', Array.from(data.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' '));
-        console.log('Is sync message:', this.isTimeSensitiveSyncMessage());
-        console.log('Is non-critical:', this.isNonCriticalMessage());
+        console.log('Processing via mutex system (PreKey 0 issue resolved)');
         
         const controller = new AbortController();
         this.abortControllers.set(key, controller);
         
         try {
-            // CRITICAL FIX: Immediate processing for time-sensitive sync messages
-            // WhatsApp sync keys expire quickly and cannot tolerate mutex delays
-            if (this.isTimeSensitiveSyncMessage()) {
-                console.log('=== IMMEDIATE PROCESSING FOR TIME-SENSITIVE SYNC (PreKey) ===', key);
-                return await this.processdecryptPreKeyWhisperMessage(data);
-            }
-            
-            // Fast bypass for non-critical messages
-            if (this.isNonCriticalMessage()) {
-                return await this.processdecryptPreKeyWhisperMessage(data);
-            }
             
             return await this.runWithPriority(
                 OperationPriority.HIGH, // CRITICAL FIX: Use HIGH priority for protocol messages
@@ -605,6 +543,13 @@ export class SessionCipher {
             const bufferedMessage = Buffer.from(preKeyProto.message);
             // CRITICAL FIX: Use baseKey for session selection (original Baileys logic)
             const session = record.getSession(Buffer.from(preKeyProto.baseKey));
+            
+            // LOG: Session building results
+            console.log('\n=== SESSION BUILDING RESULTS ===');
+            console.log('PreKey ID to remove:', preKeyId);
+            console.log('Session found:', !!session);
+            console.log('Session registration ID:', session?.registrationId);
+            console.log('Session has pending prekey:', !!session?.pendingPreKey);
             const plaintext = await this.doDecryptWhisperMessage(bufferedMessage, session);
             await this.storeRecord(record);
             if (preKeyId) {
