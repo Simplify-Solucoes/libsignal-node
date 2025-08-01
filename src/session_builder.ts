@@ -373,7 +373,8 @@ export class SessionBuilder {
         
         const preKeyPair = await this.storage.loadPreKey(message.preKeyId);
         if (message.preKeyId && message.preKeyId !== 0 && !preKeyPair) {
-            console.warn(`[SessionBuilder] PreKey ${message.preKeyId} not found, but continuing with session establishment`);
+            console.error(`[SessionBuilder] PreKey ${message.preKeyId} not found`);
+            throw new errors.PreKeyError(`PreKey ${message.preKeyId} not found`);
         }   
         
         const signedPreKeyPair = await this.storage.loadSignedPreKey(message.signedPreKeyId);
