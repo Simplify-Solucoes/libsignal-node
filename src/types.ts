@@ -62,7 +62,7 @@ export interface StorageType {
   isTrustedIdentity(address: string, identityKey: Buffer): Promise<boolean>;
   getOurRegistrationId(): Promise<number>;
   removePreKey(keyId: number): Promise<void>;
-  loadPreKey(keyId: number): Promise<PreKeyType>;
+  loadPreKey(keyId: number): Promise<PreKeyType | null>;
   // Missing signed prekey methods:
   loadSignedPreKey(keyId: number): Promise<KeyPairType>;
   storeSignedPreKey(keyId: number, keyPair: KeyPairType): Promise<void>;
